@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cardio Timer</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="Cardio" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="screen"></canvas>
+
+  <div id="controls" aria-label="timer controls">
+    <div class="panel">
+      <div class="grid">
+        <!-- Row 1: 2 botões pequenos + 1 botão largo -->
+        <button id="plusMin" class="btn" type="button" aria-label="increase primary value">▲</button>
+        <button id="plusSec" class="btn" type="button" aria-label="increase secondary value">▲</button>
+        <button id="playPause" class="btn btn-wide" type="button" aria-label="play pause toggle">▶</button>
+
+        <!-- Row 2: labels + botão para alternar o que está a ser editado -->
+        <div class="label" id="labelMin">MIN</div>
+        <div class="label" id="labelSec">SEG</div>
+        <button id="cycleTarget" class="btn-cycle" type="button" aria-label="alternar exercício, descanso ou rondas">EXERCÍCIO ▸</button>
+
+        <!-- Row 3: 4 botões do mesmo tamanho -->
+        <button id="minusMin" class="btn" type="button" aria-label="decrease primary value">▼</button>
+        <button id="minusSec" class="btn" type="button" aria-label="decrease secondary value">▼</button>
+        <button id="reset" class="btn" type="button" aria-label="reset">↻</button>
+        <button id="fullscreen" class="btn" type="button" aria-label="toggle fullscreen">⛶</button>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js").then(reg => {
+        // Quando há uma nova versão do service worker, recarrega a página automaticamente
+        reg.addEventListener("updatefound", () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener("statechange", () => {
+            if (newWorker.state === "activated") {
+              window.location.reload();
+            }
+          });
+        });
+      });
+    }
+  </script>
+</body>
+</html>

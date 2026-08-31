@@ -1,0 +1,215 @@
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  /* Cobre as safe areas (notch, barra de estado) com fundo preto */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  box-sizing: border-box;
+}
+
+#screen {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Menu */
+#controls {
+  position: fixed;
+  left: 50%;
+  bottom: 0px;
+  transform: translateX(-50%);
+  z-index: 10;
+
+  opacity: 1;
+  transition: opacity 0.5s ease;
+  pointer-events: auto;
+}
+
+/* quando está a desaparecer */
+#controls.is-fading {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- Compact glassy panel + buttons ---------- */
+/* Os valores das variáveis são definidos dinamicamente pelo JavaScript
+   com base nas dimensões reais do ecrã */
+:root{
+  --panel-radius: 26px;
+  --panel-pad-x: 26px;
+  --panel-pad-y: 22px;
+
+  --btn-w: 92px;
+  --btn-h: 64px;
+
+  --gap-x: 18px;
+  --row-gap: 14px;
+  --label-h: 30px;
+  --label-font: 13px;
+  --icon-font: 22px;
+  --icon-font-sm: 19px;
+  --cycle-font: 12px;
+}
+
+.panel {
+  padding: var(--panel-pad-y) var(--panel-pad-x);
+  border-radius: var(--panel-radius);
+
+  background: rgba(0, 0, 0, 0.40);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(10px);
+
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.65),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.grid {
+  display: grid;
+  /* 4 colunas de tamanho igual */
+  grid-template-columns: var(--btn-w) var(--btn-w) var(--btn-w) var(--btn-w);
+  grid-template-rows: var(--btn-h) var(--label-h) var(--btn-h);
+  column-gap: var(--gap-x);
+  row-gap: var(--row-gap);
+  align-items: center;
+  justify-items: center;
+}
+
+.label {
+  font: 700 var(--label-font)/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.78);
+  letter-spacing: 0.32em;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Botão que alterna entre EXERCÍCIO / DESCANSO / RONDAS */
+.btn-cycle {
+  grid-column: span 2;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.90);
+  font: 700 var(--cycle-font)/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: background 150ms ease, opacity 150ms ease;
+}
+
+.btn-cycle:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-cycle:active {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.btn-cycle[disabled] {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Buttons (visual only; keeps original functionality) */
+.btn {
+  width: var(--btn-w);
+  height: var(--btn-h);
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.03) 45%, rgba(0, 0, 0, 0.06) 100%);
+  color: rgba(255, 255, 255, 0.92);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -14px 22px rgba(0, 0, 0, 0.55);
+
+  transition: transform 120ms ease, background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+}
+
+.btn::before{
+  content:"";
+  position:absolute;
+  width: calc(var(--btn-w) - 10px);
+  height: calc(var(--btn-h) - 10px);
+  border-radius: 18px;
+  pointer-events:none;
+  opacity: 0.65;
+  background: radial-gradient(120% 120% at 50% 0%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.03) 42%, rgba(255,255,255,0) 70%);
+}
+
+.btn, .btn * { position: relative; }
+
+/* Botão largo ocupa 2 colunas */
+.btn-wide {
+  grid-column: span 2;
+  width: calc(var(--btn-w) * 2 + var(--gap-x));
+}
+
+.btn.btn-wide::before{
+  width: calc(var(--btn-w) * 2 + var(--gap-x) - 10px);
+}
+
+.btn:hover {
+  border-color: rgba(255, 255, 255, 0.20);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 50%, rgba(0, 0, 0, 0.08) 100%);
+  box-shadow:
+    0 22px 52px rgba(0, 0, 0, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -16px 26px rgba(0, 0, 0, 0.58);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(1px);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 55%, rgba(0, 0, 0, 0.12) 100%);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -18px 26px rgba(0, 0, 0, 0.62);
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 22px 52px rgba(0, 0, 0, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -16px 26px rgba(0, 0, 0, 0.58),
+    0 0 0 3px rgba(255, 255, 255, 0.10);
+}
+
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+/* icon sizing */
+#plusMin, #plusSec, #minusMin, #minusSec {
+  font-size: var(--icon-font);
+  font-weight: 900;
+}
+
+#playPause, #reset, #fullscreen {
+  font-size: var(--icon-font-sm);
+  font-weight: 900;
+}
+
+/* Keep SVG icons crisp if any */
+.icon {
+  width: 20px;
+  height: 20px;
+}
