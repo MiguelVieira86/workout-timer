@@ -11,8 +11,10 @@ const bgColorExercicio = "#8f0d0d"; // fundo vermelho durante o exercício
 const bgColorDescanso  = "#0d6b2f"; // fundo verde durante o descanso
 const flashColor = "#ffffff";       // cor do flash de alerta (inverte sobre o fundo da fase)
 
-// Pilha de fontes monospace do sistema (sem depender de nenhum ficheiro .ttf externo)
-const DIGIT_FONT_FAMILY = "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Roboto Mono', monospace";
+// Fonte "Anonymous Pro" (ficheiro local AnonymousPro-Regular.ttf, licença aberta,
+// zero traçado tal como o Menlo do Mac). Se por algum motivo não carregar, cai no
+// monospace do sistema como reserva.
+const DIGIT_FONT_FAMILY = "'Anonymous Pro', ui-monospace, Menlo, Consolas, monospace";
 
 const GAP_EM = 0.08;
 const OUTER_MARGIN = 0.05;
@@ -846,6 +848,15 @@ function bindKeyboardShortcuts() {
 async function start() {
   resizeCanvas();
   scaleMenu();
+
+  // Espera que a fonte Anonymous Pro esteja pronta antes do primeiro desenho,
+  // para não haver um "salto" visual de outra fonte para esta.
+  if (document.fonts && document.fonts.load) {
+    try {
+      await document.fonts.load("48px 'Anonymous Pro'");
+      await document.fonts.ready;
+    } catch (_) {}
+  }
 
   bindControls();
   bindKeyboardShortcuts();
