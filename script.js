@@ -1,14 +1,48 @@
 // ===== CONFIGURAÇÃO POR OMISSÃO =====
 // Cada ronda tem o seu próprio tempo de exercício e de descanso, totalmente
 // independentes das restantes. O utilizador edita ronda a ronda antes de
-// começar (setas "‹ RONDA 3/8 ›" para navegar, ＋/－ para adicionar/remover).
-function criarRondaOmissao() {
-  return { work: 20, rest: 10 }; // segundos
+// começar (setas "‹ RONDA 3/4 ›" para navegar, ＋/－ para adicionar/remover).
+const DEFAULT_WORK_SECONDS = 60; // 1 minuto
+const DEFAULT_REST_SECONDS = 10; // 10 segundos
+const DEFAULT_NUM_ROUNDS = 4;
+
+function criarRondaOmissao(isUltima = false) {
+  return { work: DEFAULT_WORK_SECONDS, rest: isUltima ? 0 : DEFAULT_REST_SECONDS };
 }
-let rounds = [
-  criarRondaOmissao(), criarRondaOmissao(), criarRondaOmissao(), criarRondaOmissao(),
-  criarRondaOmissao(), criarRondaOmissao(), criarRondaOmissao(), criarRondaOmissao(),
-]; // 8 rondas por omissão
+
+const STORAGE_KEY = "cardioTimerRoundsV1";
+
+function carregarRondasGuardadas() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    // Valida a forma dos dados antes de confiar neles
+    const valido = parsed.every(r =>
+      r && typeof r.work === "number" && typeof r.rest === "number" &&
+      r.work >= 0 && r.rest >= 0
+    );
+    return valido ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function guardarRondas() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rounds));
+  } catch (_) {
+    // Se o armazenamento local não estiver disponível, a app continua a
+    // funcionar normalmente, só não guarda as preferências entre sessões.
+  }
+}
+
+function criarRondasOmissao(n) {
+  return Array.from({ length: n }, (_, i) => criarRondaOmissao(i === n - 1));
+}
+
+let rounds = carregarRondasGuardadas() || criarRondasOmissao(DEFAULT_NUM_ROUNDS);
 
 const textColor = "#ffffff";
 const bgColorSetup = "#000000";     // fundo enquanto configuras / parado
@@ -434,7 +468,12 @@ function drawTopLabel(text, W, topY) {
 
 // ---------- Cores consoante o estado ----------
 function getBgColor() {
-  if (!sessionStarted || finished) return bgColorSetup;
+  if (finished) return bgColorSetup;
+  if (!sessionStarted) {
+    // Durante a edição, o fundo já mostra a cor da fase que estás a editar,
+    // como prévia do que vais ver durante o treino.
+    return editTarget === "EXERCICIO" ? bgColorExercicio : bgColorDescanso;
+  }
   if (phase === "EXERCICIO") return bgColorExercicio;
   if (phase === "DESCANSO") return bgColorDescanso;
   return bgColorSetup;
@@ -482,9 +521,10 @@ function drawTimer(forceFlash = false) {
   }
 
   const faseLabel = phase === "EXERCICIO" ? "EXERCÍCIO" : "DESCANSO";
-  const topLabel = `${faseLabel}  —  RONDA ${currentRound}/${rounds.length}${!running ? "  (PAUSA)" : ""}`;
-  drawTopLabel(topLabel, W, Math.round(H * 0.12));
-  drawDigits(formatMMSS(remainingSeconds), W, H, 0.78, textCol);
+  const roundaLabel2 = `RONDA ${currentRound}/${rounds.length}`;
+  drawTopLabel(roundaLabel2, W, Math.round(H * 0.11));
+  drawTopLabel(`${faseLabel}${!running ? "  (PAUSA)" : ""}`, W, Math.round(H * 0.20));
+  drawDigits(formatMMSS(remainingSeconds), W, H, 0.70, textCol);
 }
 
 // ---------- Sistema de Flash de Alerta ----------
@@ -606,19 +646,23 @@ function updateEditUI() {
     roundIndicator.textContent = `RONDA ${editRoundIndex + 1}/${rounds.length}`;
   }
 
-  // só se pode editar antes de começar o treino
-  const bloqueado = sessionStarted;
-  cycleBtn.disabled = bloqueado;
-  document.getElementById("plusMin").disabled = bloqueado;
-  document.getElementById("plusSec").disabled = bloqueado;
-  document.getElementById("minusMin").disabled = bloqueado;
-  document.getElementById("minusSec").disabled = bloqueado;
+  // só se pode navegar/adicionar/remover rondas e alternar exercício-descanso antes de começar
+  const bloqueadoConfig = sessionStarted;
+  cycleBtn.disabled = bloqueadoConfig;
 
-  if (roundNav) roundNav.classList.toggle("hidden", bloqueado);
-  if (prevBtn) prevBtn.disabled = bloqueado || editRoundIndex === 0;
-  if (nextBtn) nextBtn.disabled = bloqueado || editRoundIndex === rounds.length - 1;
-  if (addBtn) addBtn.disabled = bloqueado || rounds.length >= MAX_RONDAS;
-  if (removeBtn) removeBtn.disabled = bloqueado || rounds.length <= MIN_RONDAS;
+  // os ajustes de tempo (▲▼) ficam sempre disponíveis, mesmo a treino a decorrer —
+  // só desligam quando o treino termina (aí já não há nada para ajustar)
+  const bloqueadoAjuste = finished;
+  document.getElementById("plusMin").disabled = bloqueadoAjuste;
+  document.getElementById("plusSec").disabled = bloqueadoAjuste;
+  document.getElementById("minusMin").disabled = bloqueadoAjuste;
+  document.getElementById("minusSec").disabled = bloqueadoAjuste;
+
+  if (roundNav) roundNav.classList.toggle("hidden", bloqueadoConfig);
+  if (prevBtn) prevBtn.disabled = bloqueadoConfig || editRoundIndex === 0;
+  if (nextBtn) nextBtn.disabled = bloqueadoConfig || editRoundIndex === rounds.length - 1;
+  if (addBtn) addBtn.disabled = bloqueadoConfig || rounds.length >= MAX_RONDAS;
+  if (removeBtn) removeBtn.disabled = bloqueadoConfig || rounds.length <= MIN_RONDAS;
 }
 
 function cycleEditTarget() {
@@ -640,10 +684,15 @@ function navRound(delta) {
 
 function addRound() {
   if (sessionStarted || rounds.length >= MAX_RONDAS) return;
-  // Nova ronda a seguir à atual, copiando os tempos da atual (ponto de partida razoável)
-  const base = rounds[editRoundIndex];
-  rounds.splice(editRoundIndex + 1, 0, { work: base.work, rest: base.rest });
+  // Nova ronda com os valores por omissão (1 min exercício / 15s descanso),
+  // inserida a seguir à ronda atual.
+  rounds.splice(editRoundIndex + 1, 0, criarRondaOmissao());
   editRoundIndex++;
+  // Se a nova ronda ficou em último lugar, o descanso dela não é usado — fica a 0
+  if (editRoundIndex === rounds.length - 1) {
+    rounds[editRoundIndex].rest = 0;
+  }
+  guardarRondas();
   updateEditUI();
   drawTimer();
   resetAutoHide();
@@ -653,29 +702,50 @@ function removeRound() {
   if (sessionStarted || rounds.length <= MIN_RONDAS) return;
   rounds.splice(editRoundIndex, 1);
   editRoundIndex = Math.min(editRoundIndex, rounds.length - 1);
+  guardarRondas();
   updateEditUI();
   drawTimer();
   resetAutoHide();
 }
 
-// ---------- Ajustes de tempo (só disponíveis antes de começar) ----------
+// ---------- Ajustes de tempo ----------
+// Antes de começar: ajusta o tempo programado da ronda selecionada.
+// A treino a decorrer (ou em pausa): ajusta directamente a contagem actual,
+// sem precisar de pausar primeiro.
 function adjustMinutes(delta) {
-  if (sessionStarted) return;
+  if (finished) return;
+  if (sessionStarted) {
+    remainingSeconds = clampDuracao(remainingSeconds + delta * 60);
+    drawTimer();
+    resetAutoHide();
+    return;
+  }
   const ronda = rounds[editRoundIndex];
   if (editTarget === "EXERCICIO") ronda.work = clampDuracao(ronda.work + delta * 60);
   else ronda.rest = clampDuracao(ronda.rest + delta * 60);
+  guardarRondas();
   drawTimer();
   resetAutoHide();
 }
 
 function adjustSeconds(delta) {
-  if (sessionStarted) return;
+  if (finished) return;
+  if (sessionStarted) {
+    let { mm, ss } = getMMSS(remainingSeconds);
+    if (delta > 0) { ss++; if (ss === 60) { ss = 0; mm++; } }
+    else { ss--; if (ss === -1) { ss = 59; mm = Math.max(0, mm - 1); } }
+    remainingSeconds = clampDuracao(mm * 60 + ss);
+    drawTimer();
+    resetAutoHide();
+    return;
+  }
   const ronda = rounds[editRoundIndex];
   const campo = editTarget === "EXERCICIO" ? "work" : "rest";
   let { mm, ss } = getMMSS(ronda[campo]);
   if (delta > 0) { ss++; if (ss === 60) { ss = 0; mm++; } }
   else { ss--; if (ss === -1) { ss = 59; mm = Math.max(0, mm - 1); } }
   ronda[campo] = clampDuracao(mm * 60 + ss);
+  guardarRondas();
   drawTimer();
   resetAutoHide();
 }
@@ -735,12 +805,13 @@ function startTimer() {
   ensureAudioContext();
 
   if (!sessionStarted) {
-    // Começar um treino novo a partir da configuração
+    // Começa (ou recomeça) o treino a partir da ronda atualmente selecionada —
+    // não tem de ser sempre a primeira ronda (ex: depois de premir "parar").
     sessionStarted = true;
     finished = false;
-    currentRound = 1;
+    currentRound = editRoundIndex + 1;
     phase = "EXERCICIO";
-    remainingSeconds = rounds[0].work;
+    remainingSeconds = rounds[editRoundIndex].work;
     updateEditUI();
     beep(1, 150, 880, 0);
   }
@@ -770,10 +841,14 @@ function toggleStartPause() {
   else startTimer();
 }
 
-function resetTimer() {
+function stopTimer() {
+  // "Parar" não é um reset total: guarda em que ronda estava, para que ao
+  // premir play de novo o treino recomece nessa mesma ronda (não na primeira).
   running = false;
   finished = false;
   sessionStarted = false;
+  const rondaOndeParou = currentRound > 0 ? currentRound - 1 : editRoundIndex;
+  editRoundIndex = Math.max(0, Math.min(rounds.length - 1, rondaOndeParou));
   phase = null;
   currentRound = 0;
   remainingSeconds = 0;
@@ -844,7 +919,7 @@ function bindControls() {
   bindHoldButton(minusSec, () => adjustSeconds(-1));
 
   if (playPauseBtn) playPauseBtn.addEventListener("click", () => { ensureAudioContext(); toggleStartPause(); });
-  if (resetBtn) resetBtn.addEventListener("click", resetTimer);
+  if (resetBtn) resetBtn.addEventListener("click", stopTimer);
   if (cycleBtn) cycleBtn.addEventListener("click", cycleEditTarget);
 
   if (prevBtn) prevBtn.addEventListener("click", () => navRound(-1));
@@ -880,7 +955,7 @@ function bindKeyboardShortcuts() {
     }
     if (e.code === "KeyR") {
       e.preventDefault();
-      resetTimer();
+      stopTimer();
       return;
     }
     if (e.code === "KeyF") {
