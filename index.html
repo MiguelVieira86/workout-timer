@@ -17,16 +17,26 @@
 
   <div id="controls" aria-label="timer controls">
     <div class="panel">
+
+      <!-- Navegação entre rondas + adicionar/remover (só visível antes de começar) -->
+      <div id="roundNav" class="roundnav">
+        <button id="removeRound" class="navbtn" type="button" aria-label="remover ronda atual">－</button>
+        <button id="prevRound" class="navbtn" type="button" aria-label="ronda anterior">‹</button>
+        <div id="roundIndicator" class="roundIndicator">RONDA 1/8</div>
+        <button id="nextRound" class="navbtn" type="button" aria-label="ronda seguinte">›</button>
+        <button id="addRound" class="navbtn" type="button" aria-label="adicionar ronda">＋</button>
+      </div>
+
       <div class="grid">
         <!-- Row 1: 2 botões pequenos + 1 botão largo -->
         <button id="plusMin" class="btn" type="button" aria-label="increase primary value">▲</button>
         <button id="plusSec" class="btn" type="button" aria-label="increase secondary value">▲</button>
         <button id="playPause" class="btn btn-wide" type="button" aria-label="play pause toggle">▶</button>
 
-        <!-- Row 2: labels + botão para alternar o que está a ser editado -->
+        <!-- Row 2: labels + botão para alternar exercício/descanso -->
         <div class="label" id="labelMin">MIN</div>
         <div class="label" id="labelSec">SEG</div>
-        <button id="cycleTarget" class="btn-cycle" type="button" aria-label="alternar exercício, descanso ou rondas">EXERCÍCIO ▸</button>
+        <button id="cycleTarget" class="btn-cycle" type="button" aria-label="alternar exercício ou descanso">EXERCÍCIO ▸</button>
 
         <!-- Row 3: 4 botões do mesmo tamanho -->
         <button id="minusMin" class="btn" type="button" aria-label="decrease primary value">▼</button>

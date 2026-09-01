@@ -1,9 +1,14 @@
 // ===== CONFIGURAÇÃO POR OMISSÃO =====
-// Estes são os valores iniciais. O utilizador pode alterá-los na app
-// antes de começar o treino (botão "EXERCÍCIO ▸" alterna o que se edita).
-let workSeconds = 20;   // duração do exercício, em segundos
-let restSeconds = 10;   // duração do descanso, em segundos
-let totalRounds = 8;    // número de rondas
+// Cada ronda tem o seu próprio tempo de exercício e de descanso, totalmente
+// independentes das restantes. O utilizador edita ronda a ronda antes de
+// começar (setas "‹ RONDA 3/8 ›" para navegar, ＋/－ para adicionar/remover).
+function criarRondaOmissao() {
+  return { work: 20, rest: 10 }; // segundos
+}
+let rounds = [
+  criarRondaOmissao(), criarRondaOmissao(), criarRondaOmissao(), criarRondaOmissao(),
+  criarRondaOmissao(), criarRondaOmissao(), criarRondaOmissao(), criarRondaOmissao(),
+]; // 8 rondas por omissão
 
 const textColor = "#ffffff";
 const bgColorSetup = "#000000";     // fundo enquanto configuras / parado
@@ -33,11 +38,11 @@ const FLASH_INTERVAL = 200; // Intervalo entre flashes
 const WARNING_SECONDS = 3; // últimos segundos de cada fase onde apita a avisar
 // =======================
 
-// ---------- Estado da sessão de treino ----------
-// editTarget: o que os botões MIN/SEG estão a editar enquanto a sessão não começou
-// 'EXERCICIO' | 'DESCANSO' | 'RONDAS'
-let editTarget = "EXERCICIO";
+// ---------- Estado de edição (antes de começar o treino) ----------
+let editRoundIndex = 0;       // índice (0-based) da ronda a ser editada
+let editTarget = "EXERCICIO"; // 'EXERCICIO' | 'DESCANSO' — o que os botões MIN/SEG editam
 
+// ---------- Estado da sessão de treino ----------
 let sessionStarted = false; // true assim que se carrega em play pela 1ª vez (volta a false com reset)
 let running = false;        // true enquanto a contagem está activa (não pausada)
 let phase = null;           // 'EXERCICIO' | 'DESCANSO' | null (null = ainda não começou)
@@ -50,7 +55,6 @@ let timerId = null;
 // Sistema de flash de alerta
 let isFlashingTransition = false;
 let isFlashingEnd = false;
-let hasWarnedThisPhase = false; // evita apitar mais do que uma vez por segundo
 
 // Sistema de piscar ao terminar tudo
 let isBlinking = false;
@@ -99,9 +103,6 @@ function beep(vezes = 1, duracaoMs = 120, frequencia = 880, intervaloMs = 130) {
 // ---------- util ----------
 function clampDuracao(segundos) {
   return Math.max(0, Math.min(MAX_MINUTES_DURACAO * 60 + 59, segundos));
-}
-function clampRondas(n) {
-  return Math.max(MIN_RONDAS, Math.min(MAX_RONDAS, n));
 }
 function getMMSS(secondsTotal) {
   const c = Math.max(0, secondsTotal);
@@ -233,16 +234,56 @@ async function toggleFullscreen() {
       }
     } else {
       await requestFs(document.documentElement);
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock("landscape").catch(() => {});
+      }
     }
   } catch (_) {}
   resetAutoHide();
 }
 
+// Se a app estiver instalada (aberta a partir do ícone, não do browser),
+// entra automaticamente em fullscreen e bloqueia a orientação horizontal.
+function isStandalonePWA() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: fullscreen)").matches ||
+    window.navigator.standalone === true // iOS
+  );
+}
+
+async function autoEnterFullscreenIfInstalled() {
+  if (!isStandalonePWA()) return;
+  try {
+    if (!isFullscreen()) {
+      await requestFs(document.documentElement);
+    }
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock("landscape").catch(() => {});
+    }
+  } catch (_) {
+    // Alguns browsers exigem interação do utilizador antes do fullscreen
+    // funcionar; nesse caso o botão ⛶ continua disponível como reserva.
+  }
+}
+
 // ---------- Canvas ----------
+function getViewportSize() {
+  // visualViewport é mais fiável do que window.innerWidth/innerHeight em
+  // modo fullscreen no Android, onde por vezes o innerWidth/innerHeight
+  // fica ligeiramente desatualizado e corta conteúdo nas margens.
+  if (window.visualViewport) {
+    return {
+      w: Math.round(window.visualViewport.width),
+      h: Math.round(window.visualViewport.height),
+    };
+  }
+  return { w: window.innerWidth, h: window.innerHeight };
+}
+
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
-  const w = window.innerWidth;
-  const h = window.innerHeight;
+  const { w, h } = getViewportSize();
 
   canvas.width = Math.floor(w * dpr);
   canvas.height = Math.floor(h * dpr);
@@ -254,19 +295,18 @@ function resizeCanvas() {
 
 // Escala o menu para caber sempre no ecrã, limitado por largura E altura
 function scaleMenu() {
-  const W = window.innerWidth;
-  const H = window.innerHeight;
+  const { w: W, h: H } = getViewportSize();
 
   const panelW = 4 * 92 + 3 * 18 + 2 * 26; // 474px
-  const panelH = 2 * 64 + 30 + 2 * 14 + 2 * 22; // 230px
+  const panelH = 2 * 64 + 30 + 2 * 14 + 2 * 22 + 40; // + linha de navegação de rondas
 
   const scaleByWidth  = (W * 0.92) / panelW;
-  const scaleByHeight = (H * 0.32) / panelH;
+  const scaleByHeight = (H * 0.36) / panelH;
 
   let scale = Math.min(scaleByWidth, scaleByHeight, 1);
 
   const isPortrait = H > W;
-  if (!isPortrait) scale = Math.min(scale * 1.56, 1);
+  if (!isPortrait) scale = Math.min(scale * 1.5, 1);
 
   const r = document.documentElement;
   r.style.setProperty('--btn-w',        Math.round(92  * scale) + 'px');
@@ -402,8 +442,7 @@ function getBgColor() {
 
 // ---------- Desenho principal ----------
 function drawTimer(forceFlash = false) {
-  const W = window.innerWidth;
-  const H = window.innerHeight;
+  const { w: W, h: H } = getViewportSize();
 
   if (bKeyHeld) forceFlash = true;
 
@@ -414,23 +453,20 @@ function drawTimer(forceFlash = false) {
   const textCol = forceFlash ? bg : textColor;
 
   if (!sessionStarted) {
-    // ---------- Ecrã de configuração ----------
-    let label, str, heightFraction;
+    // ---------- Ecrã de configuração (ronda a ronda) ----------
+    const ronda = rounds[editRoundIndex];
+    const isUltimaRonda = editRoundIndex === rounds.length - 1;
+
+    let label, str;
     if (editTarget === "EXERCICIO") {
-      label = "EXERCÍCIO";
-      str = formatMMSS(workSeconds);
-      heightFraction = 0.80;
-    } else if (editTarget === "DESCANSO") {
-      label = "DESCANSO";
-      str = formatMMSS(restSeconds);
-      heightFraction = 0.80;
+      label = `RONDA ${editRoundIndex + 1}/${rounds.length}  —  EXERCÍCIO`;
+      str = formatMMSS(ronda.work);
     } else {
-      label = "NÚMERO DE RONDAS";
-      str = String(totalRounds).padStart(2, "0");
-      heightFraction = 0.80;
+      label = `RONDA ${editRoundIndex + 1}/${rounds.length}  —  DESCANSO${isUltimaRonda ? " (não usado)" : ""}`;
+      str = formatMMSS(ronda.rest);
     }
     drawTopLabel(label, W, Math.round(H * 0.14));
-    drawDigits(str, W, H, heightFraction, textCol);
+    drawDigits(str, W, H, 0.78, textCol);
     return;
   }
 
@@ -444,7 +480,7 @@ function drawTimer(forceFlash = false) {
   }
 
   const faseLabel = phase === "EXERCICIO" ? "EXERCÍCIO" : "DESCANSO";
-  const topLabel = `${faseLabel}  —  RONDA ${currentRound}/${totalRounds}${!running ? "  (PAUSA)" : ""}`;
+  const topLabel = `${faseLabel}  —  RONDA ${currentRound}/${rounds.length}${!running ? "  (PAUSA)" : ""}`;
   drawTopLabel(topLabel, W, Math.round(H * 0.12));
   drawDigits(formatMMSS(remainingSeconds), W, H, 0.78, textCol);
 }
@@ -545,73 +581,99 @@ function updatePlayPauseButton() {
   }
 }
 
-// ---------- Labels e botão de alternar alvo de edição ----------
+// ---------- Labels, botão de alternar exercício/descanso, e navegação de rondas ----------
 function updateEditUI() {
   const labelMin = document.getElementById("labelMin");
   const labelSec = document.getElementById("labelSec");
   const cycleBtn = document.getElementById("cycleTarget");
+  const roundNav = document.getElementById("roundNav");
+  const roundIndicator = document.getElementById("roundIndicator");
+  const prevBtn = document.getElementById("prevRound");
+  const nextBtn = document.getElementById("nextRound");
+  const addBtn = document.getElementById("addRound");
+  const removeBtn = document.getElementById("removeRound");
   if (!labelMin || !labelSec || !cycleBtn) return;
 
-  if (editTarget === "RONDAS") {
-    labelMin.textContent = "x5";
-    labelSec.textContent = "x1";
-  } else {
-    labelMin.textContent = "MIN";
-    labelSec.textContent = "SEG";
-  }
+  labelMin.textContent = "MIN";
+  labelSec.textContent = "SEG";
 
-  const nomes = { EXERCICIO: "EXERCÍCIO ▸", DESCANSO: "DESCANSO ▸", RONDAS: "RONDAS ▸" };
+  const nomes = { EXERCICIO: "EXERCÍCIO ▸", DESCANSO: "DESCANSO ▸" };
   cycleBtn.textContent = nomes[editTarget];
 
+  if (roundIndicator) {
+    roundIndicator.textContent = `RONDA ${editRoundIndex + 1}/${rounds.length}`;
+  }
+
   // só se pode editar antes de começar o treino
-  cycleBtn.disabled = sessionStarted;
-  document.getElementById("plusMin").disabled = sessionStarted;
-  document.getElementById("plusSec").disabled = sessionStarted;
-  document.getElementById("minusMin").disabled = sessionStarted;
-  document.getElementById("minusSec").disabled = sessionStarted;
+  const bloqueado = sessionStarted;
+  cycleBtn.disabled = bloqueado;
+  document.getElementById("plusMin").disabled = bloqueado;
+  document.getElementById("plusSec").disabled = bloqueado;
+  document.getElementById("minusMin").disabled = bloqueado;
+  document.getElementById("minusSec").disabled = bloqueado;
+
+  if (roundNav) roundNav.classList.toggle("hidden", bloqueado);
+  if (prevBtn) prevBtn.disabled = bloqueado || editRoundIndex === 0;
+  if (nextBtn) nextBtn.disabled = bloqueado || editRoundIndex === rounds.length - 1;
+  if (addBtn) addBtn.disabled = bloqueado || rounds.length >= MAX_RONDAS;
+  if (removeBtn) removeBtn.disabled = bloqueado || rounds.length <= MIN_RONDAS;
 }
 
 function cycleEditTarget() {
   if (sessionStarted) return;
-  const ordem = ["EXERCICIO", "DESCANSO", "RONDAS"];
-  const i = ordem.indexOf(editTarget);
-  editTarget = ordem[(i + 1) % ordem.length];
+  editTarget = editTarget === "EXERCICIO" ? "DESCANSO" : "EXERCICIO";
   updateEditUI();
   drawTimer();
   resetAutoHide();
 }
 
-// ---------- Ajustes (só disponíveis antes de começar) ----------
+// ---------- Navegação e gestão de rondas (só disponível antes de começar) ----------
+function navRound(delta) {
+  if (sessionStarted) return;
+  editRoundIndex = Math.max(0, Math.min(rounds.length - 1, editRoundIndex + delta));
+  updateEditUI();
+  drawTimer();
+  resetAutoHide();
+}
+
+function addRound() {
+  if (sessionStarted || rounds.length >= MAX_RONDAS) return;
+  // Nova ronda a seguir à atual, copiando os tempos da atual (ponto de partida razoável)
+  const base = rounds[editRoundIndex];
+  rounds.splice(editRoundIndex + 1, 0, { work: base.work, rest: base.rest });
+  editRoundIndex++;
+  updateEditUI();
+  drawTimer();
+  resetAutoHide();
+}
+
+function removeRound() {
+  if (sessionStarted || rounds.length <= MIN_RONDAS) return;
+  rounds.splice(editRoundIndex, 1);
+  editRoundIndex = Math.min(editRoundIndex, rounds.length - 1);
+  updateEditUI();
+  drawTimer();
+  resetAutoHide();
+}
+
+// ---------- Ajustes de tempo (só disponíveis antes de começar) ----------
 function adjustMinutes(delta) {
   if (sessionStarted) return;
-
-  if (editTarget === "RONDAS") {
-    totalRounds = clampRondas(totalRounds + delta * 5);
-  } else if (editTarget === "EXERCICIO") {
-    workSeconds = clampDuracao(workSeconds + delta * 60);
-  } else {
-    restSeconds = clampDuracao(restSeconds + delta * 60);
-  }
+  const ronda = rounds[editRoundIndex];
+  if (editTarget === "EXERCICIO") ronda.work = clampDuracao(ronda.work + delta * 60);
+  else ronda.rest = clampDuracao(ronda.rest + delta * 60);
   drawTimer();
   resetAutoHide();
 }
 
 function adjustSeconds(delta) {
   if (sessionStarted) return;
-
-  if (editTarget === "RONDAS") {
-    totalRounds = clampRondas(totalRounds + delta);
-  } else if (editTarget === "EXERCICIO") {
-    let { mm, ss } = getMMSS(workSeconds);
-    if (delta > 0) { ss++; if (ss === 60) { ss = 0; mm++; } }
-    else { ss--; if (ss === -1) { ss = 59; mm = Math.max(0, mm - 1); } }
-    workSeconds = clampDuracao(mm * 60 + ss);
-  } else {
-    let { mm, ss } = getMMSS(restSeconds);
-    if (delta > 0) { ss++; if (ss === 60) { ss = 0; mm++; } }
-    else { ss--; if (ss === -1) { ss = 59; mm = Math.max(0, mm - 1); } }
-    restSeconds = clampDuracao(mm * 60 + ss);
-  }
+  const ronda = rounds[editRoundIndex];
+  const campo = editTarget === "EXERCICIO" ? "work" : "rest";
+  let { mm, ss } = getMMSS(ronda[campo]);
+  if (delta > 0) { ss++; if (ss === 60) { ss = 0; mm++; } }
+  else { ss--; if (ss === -1) { ss = 59; mm = Math.max(0, mm - 1); } }
+  ronda[campo] = clampDuracao(mm * 60 + ss);
   drawTimer();
   resetAutoHide();
 }
@@ -641,7 +703,7 @@ function startCountdownInterval() {
 
 function handlePhaseEnd() {
   if (phase === "EXERCICIO") {
-    if (currentRound >= totalRounds) {
+    if (currentRound >= rounds.length) {
       // Treino completo!
       clearInterval(timerId);
       timerId = null;
@@ -652,16 +714,16 @@ function handlePhaseEnd() {
       triggerEndFlashThenBlink();
       return;
     }
-    // Passa a descanso
+    // Passa a descanso (usa o tempo de descanso definido para ESTA ronda)
     phase = "DESCANSO";
-    remainingSeconds = restSeconds;
+    remainingSeconds = rounds[currentRound - 1].rest;
     beep(2, 120, 523, 110);
     triggerTransitionFlash(() => drawTimer());
   } else if (phase === "DESCANSO") {
-    // Passa à ronda seguinte de exercício
+    // Passa à ronda seguinte de exercício (usa o tempo dessa nova ronda)
     currentRound++;
     phase = "EXERCICIO";
-    remainingSeconds = workSeconds;
+    remainingSeconds = rounds[currentRound - 1].work;
     beep(1, 150, 880, 0);
     triggerTransitionFlash(() => drawTimer());
   }
@@ -676,7 +738,7 @@ function startTimer() {
     finished = false;
     currentRound = 1;
     phase = "EXERCICIO";
-    remainingSeconds = workSeconds;
+    remainingSeconds = rounds[0].work;
     updateEditUI();
     beep(1, 150, 880, 0);
   }
@@ -769,6 +831,10 @@ function bindControls() {
   const resetBtn = document.getElementById("reset");
   const fsBtn = document.getElementById("fullscreen");
   const cycleBtn = document.getElementById("cycleTarget");
+  const prevBtn = document.getElementById("prevRound");
+  const nextBtn = document.getElementById("nextRound");
+  const addBtn = document.getElementById("addRound");
+  const removeBtn = document.getElementById("removeRound");
 
   bindHoldButton(plusMin,  () => adjustMinutes(+1));
   bindHoldButton(minusMin, () => adjustMinutes(-1));
@@ -778,6 +844,11 @@ function bindControls() {
   if (playPauseBtn) playPauseBtn.addEventListener("click", () => { ensureAudioContext(); toggleStartPause(); });
   if (resetBtn) resetBtn.addEventListener("click", resetTimer);
   if (cycleBtn) cycleBtn.addEventListener("click", cycleEditTarget);
+
+  if (prevBtn) prevBtn.addEventListener("click", () => navRound(-1));
+  if (nextBtn) nextBtn.addEventListener("click", () => navRound(+1));
+  if (addBtn) addBtn.addEventListener("click", addRound);
+  if (removeBtn) removeBtn.addEventListener("click", removeRound);
 
   if (fsBtn) {
     fsBtn.addEventListener("pointerdown", (e) => {
@@ -818,6 +889,16 @@ function bindKeyboardShortcuts() {
     if (e.code === "Tab") {
       e.preventDefault();
       cycleEditTarget();
+      return;
+    }
+    if (e.code === "BracketLeft") {
+      e.preventDefault();
+      navRound(-1);
+      return;
+    }
+    if (e.code === "BracketRight") {
+      e.preventDefault();
+      navRound(+1);
       return;
     }
 
@@ -868,6 +949,12 @@ async function start() {
   drawTimer();
   updatePlayPauseButton();
   resetAutoHide();
+
+  // Se a app foi aberta a partir do ícone instalado, tenta logo fullscreen + landscape.
+  await autoEnterFullscreenIfInstalled();
+  resizeCanvas();
+  scaleMenu();
+  drawTimer();
 }
 
 // ---------- Arrastar menu de controlo ----------
@@ -879,7 +966,7 @@ function bindDraggableControls() {
   let offsetY = 0;
 
   function startDrag(e) {
-    if (e.target.closest('.btn') || e.target.closest('.btn-cycle')) return;
+    if (e.target.closest('.btn') || e.target.closest('.btn-cycle') || e.target.closest('.navbtn')) return;
     isDragging = true;
 
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -941,35 +1028,36 @@ function resetControlsPosition() {
   controls.style.cursor    = '';
 }
 
-window.addEventListener("resize", () => {
+function fullRelayout() {
   resizeCanvas();
   scaleMenu();
   drawTimer();
   resetControlsPosition();
   resetAutoHide();
-});
+}
 
-document.addEventListener("fullscreenchange", () => {
-  resizeCanvas();
-  scaleMenu();
-  drawTimer();
-  resetControlsPosition();
-  resetAutoHide();
-});
-document.addEventListener("webkitfullscreenchange", () => {
-  resizeCanvas();
-  scaleMenu();
-  drawTimer();
-  resetControlsPosition();
-  resetAutoHide();
+window.addEventListener("resize", fullRelayout);
+
+document.addEventListener("fullscreenchange", fullRelayout);
+document.addEventListener("webkitfullscreenchange", fullRelayout);
+
+// orientationchange dispara por vezes antes das dimensões da janela
+// assentarem no valor final — voltamos a medir pouco depois, para
+// evitar cortes temporários nas margens.
+window.addEventListener("orientationchange", () => {
+  fullRelayout();
+  setTimeout(fullRelayout, 300);
+  setTimeout(fullRelayout, 700);
 });
 
 screen.orientation && screen.orientation.addEventListener("change", () => {
-  resizeCanvas();
-  scaleMenu();
-  drawTimer();
-  resetControlsPosition();
-  resetAutoHide();
+  fullRelayout();
+  setTimeout(fullRelayout, 300);
+  setTimeout(fullRelayout, 700);
 });
+
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", fullRelayout);
+}
 
 start();
