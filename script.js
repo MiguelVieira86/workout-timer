@@ -48,6 +48,7 @@ const textColor = "#ffffff";
 const bgColorSetup = "#000000";     // fundo enquanto configuras / parado
 const bgColorExercicio = "#8f0d0d"; // fundo vermelho durante o exercício
 const bgColorDescanso  = "#0d6b2f"; // fundo verde durante o descanso
+const bgColorPrep = "#8a5a10";      // fundo âmbar durante os 3s de preparação
 const flashColor = "#ffffff";       // cor do flash de alerta (inverte sobre o fundo da fase)
 
 // Fonte "Anonymous Pro" (ficheiro local AnonymousPro-Regular.ttf, licença aberta,
@@ -70,6 +71,8 @@ const FLASH_COUNT = 2;      // Número de flashes em transições normais
 const FLASH_INTERVAL = 200; // Intervalo entre flashes
 
 const WARNING_SECONDS = 5; // últimos segundos de cada fase onde apita a avisar
+const PREP_SECONDS = 3;    // segundos de "compasso de espera" antes de cada início de treino
+const LIVE_EDIT_FREEZE_MS = 1300; // tempo que a contagem fica "congelada" após cada ajuste manual
 // =======================
 
 // ---------- Estado de edição (antes de começar o treino) ----------
@@ -79,7 +82,9 @@ let editTarget = "EXERCICIO"; // 'EXERCICIO' | 'DESCANSO' — o que os botões M
 // ---------- Estado da sessão de treino ----------
 let sessionStarted = false; // true assim que se carrega em play pela 1ª vez (volta a false com reset)
 let running = false;        // true enquanto a contagem está activa (não pausada)
-let phase = null;           // 'EXERCICIO' | 'DESCANSO' | null (null = ainda não começou)
+let phase = null;           // 'PREPARANDO' | 'EXERCICIO' | 'DESCANSO' | null (null = ainda não começou)
+let prepRemaining = 0;      // segundos restantes da contagem de preparação (3, 2, 1)
+let liveEditFreezeUntil = 0; // timestamp até ao qual a contagem fica pausada por edição manual
 let currentRound = 0;       // 1-indexed depois de começar
 let remainingSeconds = 0;   // segundos restantes na fase actual
 let finished = false;       // true quando terminou todas as rondas
@@ -124,7 +129,7 @@ function beep(vezes = 1, duracaoMs = 120, frequencia = 880, intervaloMs = 130) {
     osc.type = "sine";
     osc.frequency.value = frequencia;
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.35, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.9, t + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + duracaoMs / 1000);
     osc.connect(gain);
     gain.connect(audioCtx.destination);
@@ -474,6 +479,7 @@ function getBgColor() {
     // como prévia do que vais ver durante o treino.
     return editTarget === "EXERCICIO" ? bgColorExercicio : bgColorDescanso;
   }
+  if (phase === "PREPARANDO") return bgColorPrep;
   if (phase === "EXERCICIO") return bgColorExercicio;
   if (phase === "DESCANSO") return bgColorDescanso;
   return bgColorSetup;
@@ -517,6 +523,12 @@ function drawTimer(forceFlash = false) {
     if (!isBlinking || blinkVisible) {
       drawDigits("FIM", W, H, 0.55, textCol);
     }
+    return;
+  }
+
+  if (phase === "PREPARANDO") {
+    drawTopLabel("A COMEÇAR EM", W, Math.round(H * 0.14));
+    drawDigits(String(prepRemaining), W, H, 0.70, textCol);
     return;
   }
 
@@ -713,9 +725,10 @@ function removeRound() {
 // A treino a decorrer (ou em pausa): ajusta directamente a contagem actual,
 // sem precisar de pausar primeiro.
 function adjustMinutes(delta) {
-  if (finished) return;
+  if (finished || phase === "PREPARANDO") return;
   if (sessionStarted) {
     remainingSeconds = clampDuracao(remainingSeconds + delta * 60);
+    liveEditFreezeUntil = Date.now() + LIVE_EDIT_FREEZE_MS;
     drawTimer();
     resetAutoHide();
     return;
@@ -729,12 +742,13 @@ function adjustMinutes(delta) {
 }
 
 function adjustSeconds(delta) {
-  if (finished) return;
+  if (finished || phase === "PREPARANDO") return;
   if (sessionStarted) {
     let { mm, ss } = getMMSS(remainingSeconds);
     if (delta > 0) { ss++; if (ss === 60) { ss = 0; mm++; } }
     else { ss--; if (ss === -1) { ss = 59; mm = Math.max(0, mm - 1); } }
     remainingSeconds = clampDuracao(mm * 60 + ss);
+    liveEditFreezeUntil = Date.now() + LIVE_EDIT_FREEZE_MS;
     drawTimer();
     resetAutoHide();
     return;
@@ -758,6 +772,11 @@ function startCountdownInterval() {
   }
   timerId = setInterval(() => {
     if (!running) return;
+
+    // Enquanto o utilizador estiver a ajustar o tempo manualmente, a contagem
+    // fica "congelada" por instantes, para os números não continuarem a
+    // descer ao mesmo tempo que se edita (ficava confuso).
+    if (Date.now() < liveEditFreezeUntil) return;
 
     remainingSeconds--;
 
@@ -805,18 +824,43 @@ function startTimer() {
   ensureAudioContext();
 
   if (!sessionStarted) {
-    // Começa (ou recomeça) o treino a partir da ronda atualmente selecionada —
-    // não tem de ser sempre a primeira ronda (ex: depois de premir "parar").
+    // Antes de começar de facto a contagem, há um pequeno "compasso de
+    // espera" de 3 segundos (3, 2, 1) com sinal sonoro, para o utilizador
+    // se preparar. Só depois é que a ronda selecionada começa a contar.
     sessionStarted = true;
     finished = false;
     currentRound = editRoundIndex + 1;
-    phase = "EXERCICIO";
-    remainingSeconds = rounds[editRoundIndex].work;
+    phase = "PREPARANDO";
+    prepRemaining = PREP_SECONDS;
     updateEditUI();
-    beep(1, 150, 880, 0);
+    stopBlinking();
+    running = true;
+    updatePlayPauseButton();
+    beep(1, 130, 660, 0);
+    drawTimer();
+    resetAutoHide();
+
+    if (timerId) clearInterval(timerId);
+    timerId = setInterval(() => {
+      prepRemaining--;
+      if (prepRemaining > 0) {
+        beep(1, 130, 660, 0);
+        drawTimer();
+      } else {
+        clearInterval(timerId);
+        timerId = null;
+        phase = "EXERCICIO";
+        remainingSeconds = rounds[editRoundIndex].work;
+        beep(2, 150, 880, 100);
+        drawTimer();
+        startCountdownInterval();
+      }
+    }, 1000);
+    return;
   }
 
   if (finished) return; // não se retoma depois de terminado; usar reset
+  if (phase === "PREPARANDO") return; // já está a decorrer a preparação
 
   stopBlinking();
   running = true;

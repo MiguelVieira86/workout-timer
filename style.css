@@ -265,8 +265,16 @@ html, body {
   font-weight: 900;
 }
 
-#playPause, #reset, #fullscreen {
+#playPause, #fullscreen {
   font-size: var(--icon-font-sm);
+  font-weight: 900;
+}
+
+/* O glifo do quadrado (⏹) parece visualmente mais pequeno que o do
+   triângulo (▶) ao mesmo tamanho de letra, por isso fica maior aqui
+   para terem peso visual semelhante. */
+#reset {
+  font-size: calc(var(--icon-font-sm) * 1.35);
   font-weight: 900;
 }
 
