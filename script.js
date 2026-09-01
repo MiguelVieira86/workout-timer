@@ -35,7 +35,7 @@ const FLASH_DURATION = 150; // Duração de cada flash em ms
 const FLASH_COUNT = 2;      // Número de flashes em transições normais
 const FLASH_INTERVAL = 200; // Intervalo entre flashes
 
-const WARNING_SECONDS = 3; // últimos segundos de cada fase onde apita a avisar
+const WARNING_SECONDS = 5; // últimos segundos de cada fase onde apita a avisar
 // =======================
 
 // ---------- Estado de edição (antes de começar o treino) ----------
@@ -298,7 +298,7 @@ function scaleMenu() {
   const { w: W, h: H } = getViewportSize();
 
   const panelW = 4 * 92 + 3 * 18 + 2 * 26; // 474px
-  const panelH = 2 * 64 + 30 + 2 * 14 + 2 * 22 + 40; // + linha de navegação de rondas
+  const panelH = 2 * 64 + 30 + 2 * 14 + 2 * 22 + 56; // + linha de navegação de rondas (maior, mais fácil de tocar)
 
   const scaleByWidth  = (W * 0.92) / panelW;
   const scaleByHeight = (H * 0.36) / panelH;
@@ -457,16 +457,18 @@ function drawTimer(forceFlash = false) {
     const ronda = rounds[editRoundIndex];
     const isUltimaRonda = editRoundIndex === rounds.length - 1;
 
-    let label, str;
+    const roundaLabel = `RONDA ${editRoundIndex + 1}/${rounds.length}`;
+    let faseLabel, str;
     if (editTarget === "EXERCICIO") {
-      label = `RONDA ${editRoundIndex + 1}/${rounds.length}  —  EXERCÍCIO`;
+      faseLabel = "EXERCÍCIO";
       str = formatMMSS(ronda.work);
     } else {
-      label = `RONDA ${editRoundIndex + 1}/${rounds.length}  —  DESCANSO${isUltimaRonda ? " (não usado)" : ""}`;
+      faseLabel = `DESCANSO${isUltimaRonda ? " (não usado)" : ""}`;
       str = formatMMSS(ronda.rest);
     }
-    drawTopLabel(label, W, Math.round(H * 0.14));
-    drawDigits(str, W, H, 0.78, textCol);
+    drawTopLabel(roundaLabel, W, Math.round(H * 0.11));
+    drawTopLabel(faseLabel, W, Math.round(H * 0.20));
+    drawDigits(str, W, H, 0.70, textCol);
     return;
   }
 
