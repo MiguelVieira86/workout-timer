@@ -147,9 +147,9 @@ function beep(vezes = 1, duracaoMs = 120, frequencia = 880, intervaloMs = 130) {
   for (let i = 0; i < vezes; i++) {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    // "square" soa objectivamente mais alto do que "sine" à mesma amplitude
-    // (tem mais harmónicos), o que ajuda a ouvir-se melhor no altifalante do telemóvel.
-    osc.type = "square";
+    // Sine soa mais suave/agradável; o ganho a 1.0 + compressor já ajudam
+    // bastante no volume percebido sem precisar de mudar a forma de onda.
+    osc.type = "sine";
     osc.frequency.value = frequencia;
     gain.gain.setValueAtTime(0.0001, t);
     gain.gain.exponentialRampToValueAtTime(1.0, t + 0.01);

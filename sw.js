@@ -1,4 +1,4 @@
-const CACHE = "cardio-timer-v9";
+const CACHE = "cardio-timer-v10";
 const FILES = [
   "./index.html",
   "./style.css",
