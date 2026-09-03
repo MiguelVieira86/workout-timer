@@ -48,7 +48,7 @@ const textColor = "#ffffff";
 const bgColorSetup = "#000000";     // fundo enquanto configuras / parado
 const bgColorExercicio = "#8f0d0d"; // fundo vermelho durante o exercício
 const bgColorDescanso  = "#0d6b2f"; // fundo verde durante o descanso
-const bgColorPrep = "#8a5a10";      // fundo âmbar durante os 3s de preparação
+const bgColorPrep = bgColorExercicio; // (já não usado como cor própria, mantido por compatibilidade)
 const flashColor = "#ffffff";       // cor do flash de alerta (inverte sobre o fundo da fase)
 
 // Fonte "Anonymous Pro" (ficheiro local AnonymousPro-Regular.ttf, licença aberta,
@@ -107,13 +107,34 @@ const canvas = document.getElementById("screen");
 const ctx = canvas.getContext("2d");
 const controls = document.getElementById("controls");
 
+// Ícone da app (mostrado, a piscar, no ecrã final em vez da palavra "FIM")
+const appIconImg = new Image();
+let appIconLoaded = false;
+appIconImg.onload = () => {
+  appIconLoaded = true;
+  if (finished) drawTimer();
+};
+appIconImg.src = "icon-512.png";
+
 // ---------- Áudio (beep via Web Audio, sem ficheiros externos) ----------
 let audioCtx = null;
+let audioCompressor = null;
 
 function ensureAudioContext() {
   if (!audioCtx) {
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC) audioCtx = new AC();
+    if (AC) {
+      audioCtx = new AC();
+      // Um compressor à saída permite subir bastante o ganho sem distorcer
+      // (o som fica "mais cheio" e mais alto na prática, sem cortar/estalar).
+      audioCompressor = audioCtx.createDynamicsCompressor();
+      audioCompressor.threshold.value = -14;
+      audioCompressor.knee.value = 12;
+      audioCompressor.ratio.value = 8;
+      audioCompressor.attack.value = 0.003;
+      audioCompressor.release.value = 0.15;
+      audioCompressor.connect(audioCtx.destination);
+    }
   }
   if (audioCtx && audioCtx.state === "suspended") {
     audioCtx.resume().catch(() => {});
@@ -126,13 +147,15 @@ function beep(vezes = 1, duracaoMs = 120, frequencia = 880, intervaloMs = 130) {
   for (let i = 0; i < vezes; i++) {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    osc.type = "sine";
+    // "square" soa objectivamente mais alto do que "sine" à mesma amplitude
+    // (tem mais harmónicos), o que ajuda a ouvir-se melhor no altifalante do telemóvel.
+    osc.type = "square";
     osc.frequency.value = frequencia;
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.9, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(1.0, t + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + duracaoMs / 1000);
     osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    gain.connect(audioCompressor || audioCtx.destination);
     osc.start(t);
     osc.stop(t + duracaoMs / 1000 + 0.02);
     t += (duracaoMs + intervaloMs) / 1000;
@@ -473,13 +496,13 @@ function drawTopLabel(text, W, topY) {
 
 // ---------- Cores consoante o estado ----------
 function getBgColor() {
-  if (finished) return bgColorSetup;
+  if (finished) return bgColorDescanso; // ecrã final usa as cores do descanso (verde)
   if (!sessionStarted) {
     // Durante a edição, o fundo já mostra a cor da fase que estás a editar,
     // como prévia do que vais ver durante o treino.
     return editTarget === "EXERCICIO" ? bgColorExercicio : bgColorDescanso;
   }
-  if (phase === "PREPARANDO") return bgColorPrep;
+  if (phase === "PREPARANDO") return bgColorExercicio; // mesma cor do exercício (vermelho)
   if (phase === "EXERCICIO") return bgColorExercicio;
   if (phase === "DESCANSO") return bgColorDescanso;
   return bgColorSetup;
@@ -521,7 +544,12 @@ function drawTimer(forceFlash = false) {
   if (finished) {
     drawTopLabel("TREINO CONCLUÍDO", W, Math.round(H * 0.14));
     if (!isBlinking || blinkVisible) {
-      drawDigits("FIM", W, H, 0.55, textCol);
+      if (appIconLoaded) {
+        const size = Math.min(W, H) * 0.5;
+        ctx.drawImage(appIconImg, (W - size) / 2, (H - size) / 2, size, size);
+      } else {
+        drawDigits("FIM", W, H, 0.55, textCol);
+      }
     }
     return;
   }
