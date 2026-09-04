@@ -1104,6 +1104,16 @@ async function start() {
   resizeCanvas();
   scaleMenu();
   drawTimer();
+
+  // Esconde o splash inicial personalizado ao fim de 2.5s (independentemente
+  // de quanto tempo o próprio Android demorar a mostrar/esconder o dele).
+  const splash = document.getElementById("splash");
+  if (splash) {
+    setTimeout(() => {
+      splash.classList.add("splash-hide");
+      setTimeout(() => splash.remove(), 450);
+    }, 2500);
+  }
 }
 
 // ---------- Arrastar menu de controlo ----------

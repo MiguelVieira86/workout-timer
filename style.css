@@ -270,12 +270,51 @@ html, body {
   font-weight: 900;
 }
 
-/* O glifo do quadrado (⏹) parece visualmente mais pequeno que o do
-   triângulo (▶) ao mesmo tamanho de letra, por isso fica maior aqui
-   para terem peso visual semelhante. */
+/* O glifo do quadrado (⏹) tinha o problema de ser interpretado como emoji
+   colorido em alguns Android, com aspeto inconsistente. Desenhamos o
+   quadrado só com CSS, para ficar sempre igual em qualquer telemóvel. */
 #reset {
   font-size: calc(var(--icon-font-sm) * 1.35);
   font-weight: 900;
+}
+
+.stop-icon {
+  display: block;
+  width: 38%;
+  height: 38%;
+  background: currentColor;
+  border-radius: 3px;
+}
+
+/* ---------- Splash inicial personalizado (ícone + nome, 2.5s) ---------- */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+  transition: opacity 400ms ease;
+}
+
+.splash.splash-hide {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+  margin-bottom: 18px;
+}
+
+.splash-title {
+  color: #ffffff;
+  font: 800 26px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  letter-spacing: 0.10em;
 }
 
 /* Keep SVG icons crisp if any */

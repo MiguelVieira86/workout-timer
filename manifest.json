@@ -1,6 +1,6 @@
 {
-  "name": "Cardio Timer",
-  "short_name": "Cardio",
+  "name": "PUXA FERRO",
+  "short_name": "Puxa Ferro",
   "description": "Timer de intervalos (Tabata) para treino de cardio",
   "start_url": "./index.html",
   "display": "fullscreen",
