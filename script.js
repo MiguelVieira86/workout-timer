@@ -496,7 +496,7 @@ function drawTopLabel(text, W, topY) {
 
 // ---------- Cores consoante o estado ----------
 function getBgColor() {
-  if (finished) return bgColorDescanso; // ecrã final usa as cores do descanso (verde)
+  if (finished) return bgColorSetup; // ecrã final com fundo preto, só o ícone a piscar
   if (!sessionStarted) {
     // Durante a edição, o fundo já mostra a cor da fase que estás a editar,
     // como prévia do que vais ver durante o treino.
@@ -1104,16 +1104,6 @@ async function start() {
   resizeCanvas();
   scaleMenu();
   drawTimer();
-
-  // Esconde o splash inicial personalizado ao fim de 2.5s (independentemente
-  // de quanto tempo o próprio Android demorar a mostrar/esconder o dele).
-  const splash = document.getElementById("splash");
-  if (splash) {
-    setTimeout(() => {
-      splash.classList.add("splash-hide");
-      setTimeout(() => splash.remove(), 450);
-    }, 2500);
-  }
 }
 
 // ---------- Arrastar menu de controlo ----------
